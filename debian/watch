@@ -1,0 +1,4 @@
+version=3
+opts=dversionmangle=s/\+dfsg\d+$// \
+https://downloads.pf.itd.nrl.navy.mil/norm/src-norm-(\d\S+)\.(?:tgz|tbz2|txz|tar\.(?:gz|bz2|xz)) \
+debian debian/repack-waf

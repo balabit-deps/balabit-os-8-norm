@@ -1,0 +1,695 @@
+Author: Luca Boccassi <bluca@debian.org>
+Description: update waf build system to be compatible with python 3
+ Apply minimal changes required to make waf 2.0.7 work with python 3 while
+ maintaining compatibility with python 2.
+Forwarded: yes
+Bug-Debian: 937155
+--- a/protolib/waflib/Build.py
++++ b/protolib/waflib/Build.py
+@@ -142,7 +142,7 @@
+ 				Node.Nod3=self.node_class
+ 				try:
+ 					data=cPickle.loads(data)
+-				except Exception ,e:
++				except Exception as e:
+ 					Logs.debug('build: Could not pickle the build cache %s: %r',dbfn,e)
+ 				else:
+ 					for x in SAVED_ATTRS:
+@@ -592,7 +592,7 @@
+ 			pass
+ 		try:
+ 			self.copy_fun(src,tgt)
+-		except EnvironmentError ,e:
++		except EnvironmentError as e:
+ 			if not os.path.exists(src):
+ 				Logs.error('File %r does not exist',src)
+ 			elif not os.path.isfile(src):
+@@ -624,7 +624,7 @@
+ 			Logs.info('- remove %s',tgt)
+ 		try:
+ 			os.remove(tgt)
+-		except OSError ,e:
++		except OSError as e:
+ 			if e.errno!=errno.ENOENT:
+ 				if not getattr(self,'uninstall_error',None):
+ 					self.uninstall_error=True
+@@ -677,7 +677,7 @@
+ 		Logs.debug('build: clean called')
+ 		if self.bldnode!=self.srcnode:
+ 			lst=[]
+-			for env in self.all_envs.values():
++			for env in list(self.all_envs.values()):
+ 				lst.extend(self.root.find_or_declare(f)for f in env[CFG_FILES])
+ 			for n in self.bldnode.ant_glob('**/*',excl='.lock* *conf_check_*/** config.log c4che/*',quiet=True):
+ 				if n in lst:
+--- a/protolib/waflib/Configure.py
++++ b/protolib/waflib/Configure.py
+@@ -140,9 +140,9 @@
+ 			module=None
+ 			try:
+ 				module=Context.load_tool(tool,tooldir,ctx=self,with_sys_path=with_sys_path)
+-			except ImportError ,e:
++			except ImportError as e:
+ 				self.fatal('Could not load the Waf tool %r from %r\n%s'%(tool,sys.path,e))
+-			except Exception ,e:
++			except Exception as e:
+ 				self.to_log('imp %r (%r & %r)'%(tool,tooldir,funs))
+ 				self.to_log(Utils.ex_stack())
+ 				raise
+@@ -285,7 +285,7 @@
+ 	return None
+ @conf
+ def run_build(self,*k,**kw):
+-	lst=[str(v)for(p,v)in kw.items()if p!='env']
++	lst=[str(v)for(p,v)in list(kw.items())if p!='env']
+ 	h=Utils.h_list(lst)
+ 	dir=self.bldnode.abspath()+os.sep+(not Utils.is_win32 and'.'or'')+'conf_check_'+Utils.to_hex(h)
+ 	try:
+--- a/protolib/waflib/Context.py
++++ b/protolib/waflib/Context.py
+@@ -167,8 +167,8 @@
+ 				kw['cwd']=kw['cwd'].abspath()
+ 		try:
+ 			ret,out,err=Utils.run_process(cmd,kw,cargs)
+-		except Exception ,e:
+-			raise Errors.WafError('Execution failure: %s'%str(e),ex=e),None,sys.exc_info()[2]
++		except Exception as e:
++			raise Errors.WafError('Execution failure: %s'%str(e),ex=e).with_traceback(sys.exc_info()[2])
+ 		if out:
+ 			if not isinstance(out,str):
+ 				out=out
+@@ -220,8 +220,8 @@
+ 				kw['cwd']=kw['cwd'].abspath()
+ 		try:
+ 			ret,out,err=Utils.run_process(cmd,kw,cargs)
+-		except Exception ,e:
+-			raise Errors.WafError('Execution failure: %s'%str(e),ex=e),None,sys.exc_info()[2]
++		except Exception as e:
++			raise Errors.WafError('Execution failure: %s'%str(e),ex=e).with_traceback(sys.exc_info()[2])
+ 		if not isinstance(out,str):
+ 			out=out
+ 		if not isinstance(err,str):
+--- a/protolib/waflib/Node.py
++++ b/protolib/waflib/Node.py
+@@ -316,7 +316,7 @@
+ 						k='^%s$'%k
+ 						try:
+ 							accu.append(re.compile(k,flags=reflags))
+-						except Exception ,e:
++						except Exception as e:
+ 							raise Errors.WafError('Invalid pattern: %s'%k,e)
+ 				ret.append(accu)
+ 			return ret
+--- a/protolib/waflib/Runner.py
++++ b/protolib/waflib/Runner.py
+@@ -96,7 +96,7 @@
+ 				self.outstanding.extend(self.frozen)
+ 				self.frozen.clear()
+ 			elif not self.count:
+-				self.outstanding.extend(self.biter.next())
++				self.outstanding.extend(next(self.biter))
+ 				self.total=self.bld.total()
+ 				break
+ 	def add_more_tasks(self,tsk):
+--- a/protolib/waflib/Scripting.py
++++ b/protolib/waflib/Scripting.py
+@@ -104,11 +104,11 @@
+ 		sys.exit(1)
+ 	try:
+ 		set_main_module(os.path.normpath(os.path.join(Context.run_dir,Context.WSCRIPT_FILE)))
+-	except Errors.WafError ,e:
++	except Errors.WafError as e:
+ 		Logs.pprint('RED',e.verbose_msg)
+ 		Logs.error(str(e))
+ 		sys.exit(1)
+-	except Exception ,e:
++	except Exception as e:
+ 		Logs.error('Waf: The wscript in %r is unreadable',Context.run_dir)
+ 		traceback.print_exc(file=sys.stdout)
+ 		sys.exit(2)
+@@ -120,14 +120,14 @@
+ 	else:
+ 		try:
+ 			run_commands()
+-		except Errors.WafError ,e:
++		except Errors.WafError as e:
+ 			if Logs.verbose>1:
+ 				Logs.pprint('RED',e.verbose_msg)
+ 			Logs.error(e.msg)
+ 			sys.exit(1)
+ 		except SystemExit:
+ 			raise
+-		except Exception ,e:
++		except Exception as e:
+ 			traceback.print_exc(file=sys.stdout)
+ 			sys.exit(2)
+ 		except KeyboardInterrupt:
+@@ -214,7 +214,7 @@
+ 			if proj['out_dir']!=proj['top_dir']:
+ 				try:
+ 					shutil.rmtree(proj['out_dir'])
+-				except EnvironmentError ,e:
++				except EnvironmentError as e:
+ 					if e.errno!=errno.ENOENT:
+ 						Logs.warn('Could not remove %r',proj['out_dir'])
+ 			else:
+@@ -223,7 +223,7 @@
+ 				p=os.path.join(k,Options.lockfile)
+ 				try:
+ 					os.remove(p)
+-				except OSError ,e:
++				except OSError as e:
+ 					if e.errno!=errno.ENOENT:
+ 						Logs.warn('Could not remove %r',p)
+ 		if not Options.commands:
+--- a/protolib/waflib/Tools/c_config.py
++++ b/protolib/waflib/Tools/c_config.py
+@@ -210,7 +210,7 @@
+ 	defi=kw.get('define_variable')
+ 	if not defi:
+ 		defi=self.env.PKG_CONFIG_DEFINES or{}
+-	for key,val in defi.items():
++	for key,val in list(defi.items()):
+ 		lst.append('--define-variable=%s=%s'%(key,val))
+ 	static=kw.get('force_static',False)
+ 	if'args'in kw:
+@@ -266,7 +266,7 @@
+ 		node=bld.srcnode.make_node(bld.kw['compile_filename'])
+ 		node.write(bld.kw['code'])
+ 	o=bld(features=bld.kw['features'],source=bld.kw['compile_filename'],target='testprog')
+-	for k,v in bld.kw.items():
++	for k,v in list(bld.kw.items()):
+ 		setattr(o,k,v)
+ 	if not bld.kw.get('quiet'):
+ 		bld.conf.to_log("==>\n%s\n<=="%bld.kw['code'])
+@@ -641,7 +641,7 @@
+ 	cmd=cc+['-dM','-E','-']
+ 	env=conf.env.env or None
+ 	try:
+-		out,err=conf.cmd_and_log(cmd,output=0,input='\n',env=env)
++		out,err=conf.cmd_and_log(cmd,output=0,input=b'\n',env=env)
+ 	except Exception:
+ 		conf.fatal('Could not determine the compiler version %r'%cmd)
+ 	if gcc:
+@@ -723,7 +723,7 @@
+ 	cmd=cc+['-V']
+ 	try:
+ 		out,err=conf.cmd_and_log(cmd,output=0)
+-	except Errors.WafError ,e:
++	except Errors.WafError as e:
+ 		if not(hasattr(e,'returncode')and hasattr(e,'stdout')and hasattr(e,'stderr')):
+ 			conf.fatal('Could not find suncc %r'%cmd)
+ 		out=e.stdout
+--- a/protolib/waflib/Tools/c_preproc.py
++++ b/protolib/waflib/Tools/c_preproc.py
+@@ -650,7 +650,7 @@
+ 				elif token=='pragma':
+ 					if re_pragma_once.match(line.lower()):
+ 						self.ban_includes.add(self.current_file)
+-			except Exception ,e:
++			except Exception as e:
+ 				if Logs.verbose:
+ 					Logs.debug('preproc: line parsing failed (%s): %s %s',e,line,Utils.ex_stack())
+ 	def define_name(self,line):
+--- a/protolib/waflib/Tools/compiler_cxx.py
++++ b/protolib/waflib/Tools/compiler_cxx.py
+@@ -21,7 +21,7 @@
+ 		conf.start_msg('Checking for %r (C++ compiler)'%compiler)
+ 		try:
+ 			conf.load(compiler)
+-		except conf.errors.ConfigurationError ,e:
++		except conf.errors.ConfigurationError as e:
+ 			conf.env.revert()
+ 			conf.end_msg(False)
+ 			debug('compiler_cxx: %r',e)
+--- a/protolib/waflib/Utils.py
++++ b/protolib/waflib/Utils.py
+@@ -48,7 +48,7 @@
+ 		def release(self):
+ 			pass
+ 	threading.Lock=threading.Thread=Lock
+-SIG_NIL='SIG_NIL_SIG_NIL_'
++SIG_NIL=b'SIG_NIL_SIG_NIL_'
+ O644=420
+ O755=493
+ rot_chr=['\\','|','/','-']
+@@ -327,7 +327,7 @@
+ 	if not os.path.isdir(path):
+ 		try:
+ 			os.makedirs(path)
+-		except OSError ,e:
++		except OSError as e:
+ 			if not os.path.isdir(path):
+ 				raise Errors.WafError('Cannot create the folder %r'%path,ex=e)
+ def check_exe(name,env=None):
+@@ -347,7 +347,7 @@
+ 				return os.path.abspath(exe_file)
+ 	return None
+ def def_attrs(cls,**kw):
+-	for k,v in kw.items():
++	for k,v in list(kw.items()):
+ 		if not hasattr(cls,k):
+ 			setattr(cls,k,v)
+ def quote_define_name(s):
+@@ -505,7 +505,7 @@
+ 	if not proc:
+ 		return run_regular_process(cmd,kwargs,cargs)
+ 	proc.stdin.write(obj)
+-	proc.stdin.write('\n')
++	proc.stdin.write(b'\n')
+ 	proc.stdin.flush()
+ 	obj=proc.stdout.readline()
+ 	if not obj:
+@@ -557,7 +557,7 @@
+ 		out,err=(None,None)
+ 		try:
+ 			status=proc.wait(**cargs)
+-		except TimeoutExpired ,e:
++		except TimeoutExpired as e:
+ 			if kwargs.get('start_new_session')and hasattr(os,'killpg'):
+ 				os.killpg(proc.pid,signal.SIGKILL)
+ 			else:
+--- a/protolib/waflib/ansiterm.py
++++ b/protolib/waflib/ansiterm.py
+@@ -232,7 +232,7 @@
+ 			return struct.unpack("HHHH",fcntl.ioctl(FD,termios.TIOCGWINSZ,struct.pack("HHHH",0,0,0,0)))[1]
+ 		try:
+ 			fun()
+-		except Exception ,e:
++		except Exception as e:
+ 			pass
+ 		else:
+ 			get_term_cols=fun
+--- a/protolib/wscript
++++ b/protolib/wscript
+@@ -120,7 +120,7 @@
+     # Compiler-specific flags
+     if ctx.options.debug:
+         #ctx.env.DEFINES_BUILD_PROTOLIB += ['PROTO_DEBUG', 'DEBUG', '_DEBUG']
+-		ctx.env.DEFINES_BUILD_PROTOLIB += ['PROTO_DEBUG', 'DEBUG']
++        ctx.env.DEFINES_BUILD_PROTOLIB += ['PROTO_DEBUG', 'DEBUG']
+     else:
+         ctx.env.DEFINES_BUILD_PROTOLIB += ['NDEBUG', "PROTO_DEBUG"]
+ 
+@@ -139,7 +139,7 @@
+             ctx.env.CFLAGS += ['/Od', '/RTC1', '/ZI']
+         else:
+             ctx.env.CXXFLAGS += ['/Ox', '/DNDEBUG']
+-        	#ctx.env.CXXFLAGS += ['/Ox', '/DNDEBUG', '/DWINVER=0x0501']
++            #ctx.env.CXXFLAGS += ['/Ox', '/DNDEBUG', '/DWINVER=0x0501']
+         ctx.env.CFLAGS
+ 
+ def build(ctx):
+--- a/waflib/Build.py
++++ b/waflib/Build.py
+@@ -131,7 +131,7 @@
+ 				Node.Nod3=self.node_class
+ 				try:
+ 					data=cPickle.loads(data)
+-				except Exception ,e:
++				except Exception as e:
+ 					Logs.debug('build: Could not pickle the build cache %s: %r',dbfn,e)
+ 				else:
+ 					for x in SAVED_ATTRS:
+@@ -576,7 +576,7 @@
+ 			pass
+ 		try:
+ 			self.copy_fun(src,tgt)
+-		except EnvironmentError ,e:
++		except EnvironmentError as e:
+ 			if not os.path.exists(src):
+ 				Logs.error('File %r does not exist',src)
+ 			elif not os.path.isfile(src):
+@@ -608,7 +608,7 @@
+ 			Logs.info('- remove %s',tgt)
+ 		try:
+ 			os.remove(tgt)
+-		except OSError ,e:
++		except OSError as e:
+ 			if e.errno!=errno.ENOENT:
+ 				if not getattr(self,'uninstall_error',None):
+ 					self.uninstall_error=True
+@@ -655,7 +655,7 @@
+ 				n.delete()
+ 		elif self.bldnode!=self.srcnode:
+ 			lst=[]
+-			for env in self.all_envs.values():
++			for env in list(self.all_envs.values()):
+ 				lst.extend(self.root.find_or_declare(f)for f in env[CFG_FILES])
+ 			for n in self.bldnode.ant_glob('**/*',excl='.lock* *conf_check_*/** config.log c4che/*',quiet=True):
+ 				if n in lst:
+--- a/waflib/Configure.py
++++ b/waflib/Configure.py
+@@ -140,9 +140,9 @@
+ 			module=None
+ 			try:
+ 				module=Context.load_tool(tool,tooldir,ctx=self,with_sys_path=with_sys_path)
+-			except ImportError ,e:
++			except ImportError as e:
+ 				self.fatal('Could not load the Waf tool %r from %r\n%s'%(tool,getattr(e,'waf_sys_path',sys.path),e))
+-			except Exception ,e:
++			except Exception as e:
+ 				self.to_log('imp %r (%r & %r)'%(tool,tooldir,funs))
+ 				self.to_log(traceback.format_exc())
+ 				raise
+@@ -282,7 +282,7 @@
+ 	return None
+ @conf
+ def run_build(self,*k,**kw):
+-	lst=[str(v)for(p,v)in kw.items()if p!='env']
++	lst=[str(v)for(p,v)in list(kw.items())if p!='env']
+ 	h=Utils.h_list(lst)
+ 	dir=self.bldnode.abspath()+os.sep+(not Utils.is_win32 and'.'or'')+'conf_check_'+Utils.to_hex(h)
+ 	try:
+--- a/waflib/Context.py
++++ b/waflib/Context.py
+@@ -172,8 +172,8 @@
+ 		encoding=kw.pop('decode_as',default_encoding)
+ 		try:
+ 			ret,out,err=Utils.run_process(cmd,kw,cargs)
+-		except Exception ,e:
+-			raise Errors.WafError('Execution failure: %s'%str(e),ex=e),None,sys.exc_info()[2]
++		except Exception as e:
++			raise Errors.WafError('Execution failure: %s'%str(e),ex=e).with_traceback(sys.exc_info()[2])
+ 		if out:
+ 			if not isinstance(out,str):
+ 				out=out.decode(encoding,errors='replace')
+@@ -218,8 +218,8 @@
+ 		encoding=kw.pop('decode_as',default_encoding)
+ 		try:
+ 			ret,out,err=Utils.run_process(cmd,kw,cargs)
+-		except Exception ,e:
+-			raise Errors.WafError('Execution failure: %s'%str(e),ex=e),None,sys.exc_info()[2]
++		except Exception as e:
++			raise Errors.WafError('Execution failure: %s'%str(e),ex=e).with_traceback(sys.exc_info()[2])
+ 		if not isinstance(out,str):
+ 			out=out.decode(encoding,errors='replace')
+ 		if not isinstance(err,str):
+@@ -371,7 +371,7 @@
+ 			sys.path=tooldir+sys.path
+ 			try:
+ 				__import__(tool)
+-			except ImportError ,e:
++			except ImportError as e:
+ 				e.waf_sys_path=list(sys.path)
+ 				raise
+ 			finally:
+@@ -392,7 +392,7 @@
+ 						x=None
+ 				else:
+ 					__import__(tool)
+-			except ImportError ,e:
++			except ImportError as e:
+ 				e.waf_sys_path=list(sys.path)
+ 				raise
+ 			finally:
+--- a/waflib/Node.py
++++ b/waflib/Node.py
+@@ -52,7 +52,7 @@
+ 				k='^%s$'%k
+ 				try:
+ 					exp=re.compile(k,flags=reflags)
+-				except Exception ,e:
++				except Exception as e:
+ 					raise Errors.WafError('Invalid pattern: %s'%k,e)
+ 				else:
+ 					accu.append(exp)
+--- a/waflib/Options.py
++++ b/waflib/Options.py
+@@ -18,7 +18,7 @@
+ 		while rargs:
+ 			try:
+ 				optparse.OptionParser._process_args(self,largs,rargs,values)
+-			except(optparse.BadOptionError,optparse.AmbiguousOptionError),e:
++			except(optparse.BadOptionError,optparse.AmbiguousOptionError) as e:
+ 				if self.allow_unknown:
+ 					largs.append(e.opt_str)
+ 				else:
+@@ -33,7 +33,7 @@
+ 			s=cls.__doc__ or''
+ 			cmds_str[cls.cmd]=s
+ 		if Context.g_module:
+-			for(k,v)in Context.g_module.__dict__.items():
++			for(k,v)in list(Context.g_module.__dict__.items()):
+ 				if k in('options','init','shutdown'):
+ 					continue
+ 				if type(v)is type(Context.create_context):
+@@ -42,7 +42,7 @@
+ 		just=0
+ 		for k in cmds_str:
+ 			just=max(just,len(k))
+-		lst=['  %s: %s'%(k.ljust(just),v)for(k,v)in cmds_str.items()]
++		lst=['  %s: %s'%(k.ljust(just),v)for(k,v)in list(cmds_str.items())]
+ 		lst.sort()
+ 		ret='\n'.join(lst)
+ 		return'''waf [commands] [options]
+--- a/waflib/Runner.py
++++ b/waflib/Runner.py
+@@ -143,7 +143,7 @@
+ 					else:
+ 						raise Errors.WafError('Broken revdeps detected on %r'%self.incomplete)
+ 				else:
+-					tasks=self.biter.next()
++					tasks=next(self.biter)
+ 					ready,waiting=self.prio_and_split(tasks)
+ 					self.outstanding.extend(ready)
+ 					self.incomplete.update(waiting)
+--- a/waflib/Scripting.py
++++ b/waflib/Scripting.py
+@@ -99,11 +99,11 @@
+ 		sys.exit(1)
+ 	try:
+ 		set_main_module(os.path.normpath(os.path.join(Context.run_dir,Context.WSCRIPT_FILE)))
+-	except Errors.WafError ,e:
++	except Errors.WafError as e:
+ 		Logs.pprint('RED',e.verbose_msg)
+ 		Logs.error(str(e))
+ 		sys.exit(1)
+-	except Exception ,e:
++	except Exception as e:
+ 		Logs.error('Waf: The wscript in %r is unreadable',Context.run_dir)
+ 		traceback.print_exc(file=sys.stdout)
+ 		sys.exit(2)
+@@ -124,14 +124,14 @@
+ 					pdb.post_mortem(tb)
+ 				else:
+ 					raise
+-		except Errors.WafError ,e:
++		except Errors.WafError as e:
+ 			if Logs.verbose>1:
+ 				Logs.pprint('RED',e.verbose_msg)
+ 			Logs.error(e.msg)
+ 			sys.exit(1)
+ 		except SystemExit:
+ 			raise
+-		except Exception ,e:
++		except Exception as e:
+ 			traceback.print_exc(file=sys.stdout)
+ 			sys.exit(2)
+ 		except KeyboardInterrupt:
+@@ -201,7 +201,7 @@
+ 	def remove_and_log(k,fun):
+ 		try:
+ 			fun(k)
+-		except EnvironmentError ,e:
++		except EnvironmentError as e:
+ 			if e.errno!=errno.ENOENT:
+ 				Logs.warn('Could not remove %r',k)
+ 	if not Options.commands:
+--- a/waflib/Tools/c_config.py
++++ b/waflib/Tools/c_config.py
+@@ -169,7 +169,7 @@
+ 	defi=kw.get('define_variable')
+ 	if not defi:
+ 		defi=self.env.PKG_CONFIG_DEFINES or{}
+-	for key,val in defi.items():
++	for key,val in list(defi.items()):
+ 		lst.append('--define-variable=%s=%s'%(key,val))
+ 	static=kw.get('force_static',False)
+ 	if'args'in kw:
+@@ -217,7 +217,7 @@
+ 		node=bld.srcnode.make_node(bld.kw['compile_filename'])
+ 		node.write(bld.kw['code'])
+ 	o=bld(features=bld.kw['features'],source=bld.kw['compile_filename'],target='testprog')
+-	for k,v in bld.kw.items():
++	for k,v in list(bld.kw.items()):
+ 		setattr(o,k,v)
+ 	if not bld.kw.get('quiet'):
+ 		bld.conf.to_log("==>\n%s\n<=="%bld.kw['code'])
+@@ -569,7 +569,7 @@
+ 	cmd=cc+['-dM','-E','-']
+ 	env=conf.env.env or None
+ 	try:
+-		out,err=conf.cmd_and_log(cmd,output=0,input='\n',env=env)
++		out,err=conf.cmd_and_log(cmd,output=0,input=b'\n',env=env)
+ 	except Errors.WafError:
+ 		conf.fatal('Could not determine the compiler version %r'%cmd)
+ 	if gcc:
+@@ -651,7 +651,7 @@
+ 	cmd=cc+['-V']
+ 	try:
+ 		out,err=conf.cmd_and_log(cmd,output=0)
+-	except Errors.WafError ,e:
++	except Errors.WafError as e:
+ 		if not(hasattr(e,'returncode')and hasattr(e,'stdout')and hasattr(e,'stderr')):
+ 			conf.fatal('Could not find suncc %r'%cmd)
+ 		out=e.stdout
+--- a/waflib/Tools/c_preproc.py
++++ b/waflib/Tools/c_preproc.py
+@@ -653,7 +653,7 @@
+ 				elif token=='pragma':
+ 					if re_pragma_once.match(line.lower()):
+ 						self.ban_includes.add(self.current_file)
+-			except Exception ,e:
++			except Exception as e:
+ 				if Logs.verbose:
+ 					Logs.debug('preproc: line parsing failed (%s): %s %s',e,line,traceback.format_exc())
+ 	def define_name(self,line):
+--- a/waflib/Tools/compiler_cxx.py
++++ b/waflib/Tools/compiler_cxx.py
+@@ -21,7 +21,7 @@
+ 		conf.start_msg('Checking for %r (C++ compiler)'%compiler)
+ 		try:
+ 			conf.load(compiler)
+-		except conf.errors.ConfigurationError ,e:
++		except conf.errors.ConfigurationError as e:
+ 			conf.env.revert()
+ 			conf.end_msg(False)
+ 			debug('compiler_cxx: %r',e)
+--- a/waflib/Tools/ifort.py
++++ b/waflib/Tools/ifort.py
+@@ -189,7 +189,7 @@
+ 		if conf.logger:
+ 			conf.logger.error(st)
+ 		conf.fatal('ifort: Unicode error - check the code page?')
+-	except Exception ,e:
++	except Exception as e:
+ 		Logs.debug('ifort: get_ifort_version: %r %r %r -> failure %s',compiler,version,target,str(e))
+ 		conf.fatal('ifort: cannot run the compiler in get_ifort_version (run with -v to display errors)')
+ 	else:
+--- a/waflib/Tools/msvc.py
++++ b/waflib/Tools/msvc.py
+@@ -46,7 +46,7 @@
+ 	if conf.env.MSVC_LAZY_AUTODETECT is False:
+ 		lazy_detect=False
+ 	if not lazy_detect:
+-		for val in versiondict.values():
++		for val in list(versiondict.values()):
+ 			for arch in list(val.keys()):
+ 				cfg=val[arch]
+ 				cfg.evaluate()
+@@ -118,7 +118,7 @@
+ 		if conf.logger:
+ 			conf.logger.error(st)
+ 		conf.fatal('msvc: Unicode error - check the code page?')
+-	except Exception ,e:
++	except Exception as e:
+ 		Logs.debug('msvc: get_msvc_version: %r %r %r -> failure %s',compiler,version,target,str(e))
+ 		conf.fatal('msvc: cannot run the compiler in get_msvc_version (run with -v to display errors)')
+ 	else:
+@@ -304,7 +304,7 @@
+ 	args=[vswhere,'-products','*','-legacy','-format','json']
+ 	try:
+ 		txt=conf.cmd_and_log(args)
+-	except Errors.WafError ,e:
++	except Errors.WafError as e:
+ 		Logs.debug('msvc: vswhere.exe failed %s',e)
+ 		return
+ 	if sys.version_info[0]<3:
+--- a/waflib/Utils.py
++++ b/waflib/Utils.py
+@@ -49,7 +49,7 @@
+ 		def release(self):
+ 			pass
+ 	threading.Lock=threading.Thread=Lock
+-SIG_NIL='SIG_NIL_SIG_NIL_'
++SIG_NIL=b'SIG_NIL_SIG_NIL_'
+ O644=420
+ O755=493
+ rot_chr=['\\','|','/','-']
+@@ -331,7 +331,7 @@
+ 	if not os.path.isdir(path):
+ 		try:
+ 			os.makedirs(path)
+-		except OSError ,e:
++		except OSError as e:
+ 			if not os.path.isdir(path):
+ 				raise Errors.WafError('Cannot create the folder %r'%path,ex=e)
+ def check_exe(name,env=None):
+@@ -351,7 +351,7 @@
+ 				return os.path.abspath(exe_file)
+ 	return None
+ def def_attrs(cls,**kw):
+-	for k,v in kw.items():
++	for k,v in list(kw.items()):
+ 		if not hasattr(cls,k):
+ 			setattr(cls,k,v)
+ def quote_define_name(s):
+@@ -365,7 +365,7 @@
+ 		return cmd
+ 	return' '.join(repr(x)if re_sh.search(x)else x for x in cmd)
+ def h_list(lst):
+-	return md5(repr(lst)).digest()
++	return md5(repr(lst).encode()).digest()
+ def h_fun(fun):
+ 	try:
+ 		return fun.code
+@@ -521,7 +521,7 @@
+ 	if not proc:
+ 		return run_regular_process(cmd,kwargs,cargs)
+ 	proc.stdin.write(obj)
+-	proc.stdin.write('\n')
++	proc.stdin.write(b'\n')
+ 	proc.stdin.flush()
+ 	obj=proc.stdout.readline()
+ 	if not obj:
+@@ -575,7 +575,7 @@
+ 		out,err=(None,None)
+ 		try:
+ 			status=proc.wait(**cargs)
+-		except TimeoutExpired ,e:
++		except TimeoutExpired as e:
+ 			if kwargs.get('start_new_session')and hasattr(os,'killpg'):
+ 				os.killpg(proc.pid,signal.SIGKILL)
+ 			else:
+--- a/waflib/ansiterm.py
++++ b/waflib/ansiterm.py
+@@ -232,7 +232,7 @@
+ 			return struct.unpack("HHHH",fcntl.ioctl(FD,termios.TIOCGWINSZ,struct.pack("HHHH",0,0,0,0)))[1]
+ 		try:
+ 			fun()
+-		except Exception ,e:
++		except Exception as e:
+ 			pass
+ 		else:
+ 			get_term_cols=fun
+--- a/waflib/processor.py
++++ b/waflib/processor.py
+@@ -38,7 +38,7 @@
+ 			exc.stderr=err
+ 			raise exc
+ 		ret=proc.returncode
+-	except Exception ,e:
++	except Exception as e:
+ 		exc_type,exc_value,tb=sys.exc_info()
+ 		exc_lines=traceback.format_exception(exc_type,exc_value,tb)
+ 		trace=str(cmd)+'\n'+''.join(exc_lines)
+--- a/wscript
++++ b/wscript
+@@ -18,6 +18,7 @@
+ 
+ '''
+ 
++from __future__ import print_function
+ import platform
+ 
+ import waflib
+@@ -32,7 +33,7 @@
+     if "#define" == line[0] and "VERSION" == line[1]:
+         VERSION = line[2].strip('"')
+ if VERSION is None:
+-    print "Warning: NORM VERSION not found!?"
++    print ("Warning: NORM VERSION not found!?")
+ 
+ # So you don't need to do ./waf configure if you are just using the defaults
+ waflib.Configure.autoconfig = True

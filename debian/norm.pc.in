@@ -1,0 +1,11 @@
+prefix=/usr
+exec_prefix=${prefix}
+libdir=${prefix}/lib/@DEB_HOST_MULTIARCH@
+includedir=${prefix}/include
+
+Name: norm
+Version: @VERSION@
+Description: NACK-Oriented Reliable Multicast (NORM) library
+Libs: -L${libdir} -lnorm
+Libs.private: -lstdc++ -lprotolib @STATIC_LIBS@
+Cflags: -I${includedir}
